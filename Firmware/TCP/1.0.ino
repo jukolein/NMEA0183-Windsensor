@@ -38,10 +38,7 @@ long oldtimes = millis();   //used to calculate the time between two status chan
 
 WiFiServer server(PORT); // define the server port
 WiFiClient clients[MAX_CLIENTS]; // Array of clients
-/*
-  IPAddress broadcastIP(255, 255, 255, 255); // use the broadcast IP to reach all possible listners
-  WiFiUDP Udp;  //UPD protocol, because it is easy to handle and has less overhead than TCP
-*/
+
 //********************************************************
 // Support functions
 //********************************************************
