@@ -435,7 +435,7 @@ void loop() {
 
   webserver.handleClient();  //Handle client requests of the HTTP-webserver
 
-  int Z = convertRawAngleToDegrees(ams5600.getRawAngle()); //stores the value of the angle
+  int Z = convertRawAngleToDegrees(ams5600.getRawAngle()) + offset.toInt(); //stores the value of the angle after adding the offset
 
   long WS = 0;  //stores the value of the wind speed
   byte bySpeedCorrection = 100;  //value for finetuning the speed calculation
