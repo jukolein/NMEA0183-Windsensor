@@ -7,16 +7,17 @@
 #include <Wire.h>
 #include <WiFiUdp.h>
 #include <AS5600.h>   //https://github.com/Seeed-Studio/Seeed_Arduino_AS5600
+#include <FS.h>
 
-
-//********************************************************
+//******************************************************************************************************************************************************
 // Global variables
-//********************************************************
+//******************************************************************************************************************************************************
 
-#define DELAY_MS 1000 // MS to wait
-#define DELAY_COUNT 1 // Counter of DELAY_MS to wait, 3600 is 1 hour
-#define PORT 8080 // Port to connect
-#define MAX_CLIENTS 3 // Number of simultaneous broadcast clients
+#define DELAY_MS 1000 //MS to wait
+#define DELAY_COUNT 1 //Counter of DELAY_MS to wait, 3600 is 1 hour
+#define TCP_PORT 8080 //Port to connect for to receive the NMEA sentences via TCP
+#define HTTP_PORT 80  //Port to reach the HTTP webserver 
+#define MAX_CLIENTS 3 //maximal number of simultaneousy connected clients
 
 AMS_5600 ams5600;  //select correct chip
 
@@ -31,18 +32,65 @@ volatile boolean blStatusChange = false;  //boolean for storing the current stat
 volatile long times = millis();  //used to calculate the time between two status changes
 long oldtimes = millis();   //used to calculate the time between two status changes
 
+String offset;  //string for storing the offset of the wind angle
+String factor;  //string for storing the liear correction facor of the wind speed
+
+String blIPblink;  //string for storing if the IP is to be blinked or not. "geblinkt" equals "true", "nicht geblinkt" equals "false"
 
 //--------------------------------------------------------
-// ESP8266 WiFi variables
+// ESP8266 WiFi and webserver variables
 //--------------------------------------------------------
 
-WiFiServer server(PORT); // define the server port
-WiFiClient clients[MAX_CLIENTS]; // Array of clients
+WiFiServer server(TCP_PORT); //define the server port
+WiFiClient clients[MAX_CLIENTS]; //Array of clients
 
-//********************************************************
-// Support functions
-//********************************************************
+ESP8266WebServer webserver(HTTP_PORT); //define the HTTP-webserver port
+
+//HTML code for the webpage where the correction-values are set
+const char correction_page[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<head>
+  <meta content="text/html; charset=UTF-8" http-equiv="content-type">
+</head>
+<html>
+<body>
+
+<h2>Windsensor III<h2>
+<h3>Korrekturdaten</h3>
+
+<form action="/action_page">
+  Vorzeichenbehafteter Offset der Windrichtung in Grad:<br>
+  <input type="text" name="offset_html" value="offset_placeholder">
+  <br>  <br>
+  linearer Korrekturfaktor der Windgeschwindigkeit:<br>
+  <input type="text" name="factor_html" value="factor_placeholder">
+  <br>  <br>
+  <input type="submit" value="Anwenden">
+</form> 
+ <br>  <br>
+<form>
+  Aktuell wird die IP beim Start ipblink_placeholder <br>
+  <button class="button" onclick="toggle()">Ändern</button>
+</form> 
+
+<script>
+function toggle() {
+     var xhr = new XMLHttpRequest();
+     xhr.open("GET", "/ipblink", true);
+     xhr.send();
+}
+</script>
+
+</body>
+</html>
+)=====";
+
+
+//******************************************************************************************************************************************************
+// Support functions for the core code and calculation
+//******************************************************************************************************************************************************
 //--------------------------------------------------------
+
 // ip_blink - Blinks the IP address of the ESP with the build
 // in LED, so you can connect to it without having to scan
 // the network or connecting via serial.
@@ -52,24 +100,25 @@ WiFiClient clients[MAX_CLIENTS]; // Array of clients
 // Example: "192." will be displayed as:
 // 2 FLASHES, BREAK, 10 FLASHES, BREAK, 3 FLASHES, 3 RAPID FLASHES
 //--------------------------------------------------------
+
 void ip_blink() {
   String ip = WiFi.localIP().toString();  //sore current IP in string
   for (int i = 0; i <= ip.length(); i++) {
     if (ip.charAt(i) == '.') {  //check for dots and indicate them by three rapid flashes
       for (int i = 0; i <= 2; i++) {
-        digitalWrite(LED_BUILTIN, LOW);   // turn the LED on (HIGH is the voltage level)
-        delay(100);                       // wait for a second
-        digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-        delay(100);                       // wait for a second
+        digitalWrite(LED_BUILTIN, LOW);   //turn the LED on (HIGH is the voltage level)
+        delay(100);                       //wait for a second
+        digitalWrite(LED_BUILTIN, HIGH);   //turn the LED on (HIGH is the voltage level)
+        delay(100);                       //wait for a second
       }
     }
     else {
       int times = ip.charAt(i) - '0';  //store the digit at the current position as int
       //    Serial.print(times);
       for (int j = 0; j <= times; j++) {
-        digitalWrite(LED_BUILTIN, LOW);   // turn the LED on (HIGH is the voltage level)
-        delay(200);                       // wait for a second
-        digitalWrite(LED_BUILTIN, HIGH);    // turn the LED off by making the voltage LOW
+        digitalWrite(LED_BUILTIN, LOW);   //turn the LED on (HIGH is the voltage level)
+        delay(200);                       //wait for a second
+        digitalWrite(LED_BUILTIN, HIGH);    //turn the LED off by making the voltage LOW
         delay(200);
       }
     }
@@ -133,16 +182,116 @@ float convertRawAngleToDegrees(word newAngle) {
   return ang;
 }
 
-//********************************************************
+
+//******************************************************************************************************************************************************
+// Support functions for the HTTP-webserver and the correction-values
+//******************************************************************************************************************************************************
+
+//--------------------------------------------------------
+// readFile - return a string with the information stored 
+// in the txt-file that was handed over to the function
+//--------------------------------------------------------
+
+String readFile(fs::FS &fs, const char * path){
+  File file = fs.open(path, "r");  //open the named file with reading-rights
+  if(!file || file.isDirectory()){  //check if there is a file to read from
+    return String();
+  }
+  String fileContent;  //string to store the content of the file in
+  while(file.available()){
+    fileContent+=String((char)file.read());  //itterate through the file and store the findings in the string
+  }
+  file.close();
+  return fileContent;
+}
+
+
+//--------------------------------------------------------
+// writeFile - persistently store a given correction-value
+// in a given txt-file
+//--------------------------------------------------------
+
+void writeFile(fs::FS &fs, const char * path, const char * message){
+  File file = fs.open(path, "w");  //open the named file with writing-rights
+  if(!file){  //check if there is a file to write to
+    return;
+  }
+  if(file.print(message)){
+    //if the writing was successful, the global variable with the correction-value
+    //needs to be updated, so the changes take effect immediadly and don't
+    //require a reboot or a permanent check in the loop()-function.
+    //for simplicity, all values are updated. As the change of the values
+    //should only rarely happen, that's not a big deal
+    offset = readFile(SPIFFS, "/offset.txt");  //update the offset-value
+    factor = readFile(SPIFFS, "/factor.txt");  //upate the factor-value
+    blIPblink = readFile(SPIFFS, "/blipblink.txt");  //update the blIPblink state
+  }
+  file.close();
+}
+
+
+//--------------------------------------------------------
+// handleCorrection - send the HTML-code for the  
+// correction page to the client and display the current
+// values
+//--------------------------------------------------------
+
+void handleCorrection() {
+  String s = correction_page; //string to store the HTML page
+  s.replace("offset_placeholder", offset);  //display current offset in the form
+  s.replace("factor_placeholder", factor);  //display current facor in the form
+  s.replace("ipblink_placeholder", blIPblink);  //display in the form if IP is going to be blinked at next boot
+  webserver.send(200, "text/html", s); //Send web page
+}
+
+
+//--------------------------------------------------------
+// handleForm - store the correction-values handed over by 
+// the webpage into the permanent SPIFFS-storage of the ESP
+//--------------------------------------------------------
+
+void handleForm() {
+ String offset_html = webserver.arg("offset_html"); //read the value after "offset_html" of the HTTP-GET-request send by the client
+ String factor_html = webserver.arg("factor_html"); //read the value after "factor_html" of the HTTP-GET-request send by the client
+
+ writeFile(SPIFFS, "/offset.txt", offset_html.c_str());  //persistently store it in a text file in the SPIFFS-section
+ writeFile(SPIFFS, "/factor.txt", factor_html.c_str());  //persistently store it in a text file in the SPIFFS-section
+
+ String link = "<a href='/'> Startseite </a>";  //create a HTML-link that brings you back to the root page
+ webserver.send(200, "text/html", link); //Send that link
+}
+
+
+//--------------------------------------------------------
+// ipBlinkToggle - if called, this function toggles the 
+// value that defines if the IP is going to blinked at boot
+//--------------------------------------------------------
+
+void ipBlinkToggle() {
+   String blIPblink_html;  //string for storing the value that will be written
+   if (blIPblink.equals("nicht geblinkt")) {  //check current state, and, if "false" (that means "nicht geblinkt" in this case), change it to "true" ("geblinkt")...
+    blIPblink_html = "geblinkt";}
+   else {
+    blIPblink_html = "nicht geblinkt";  //... and if it is "true", make it "false"
+    }
+
+    writeFile(SPIFFS, "/blipblink.txt", blIPblink_html.c_str());  //persistently store it in a text file in the SPIFFS-section
+}
+
+
+//******************************************************************************************************************************************************
 // Setup
-//********************************************************
+//******************************************************************************************************************************************************
+
 void setup() {
 
-  Serial.begin(74880);         // Start the Serial communication to send messages to the computer
+  Serial.begin(74880);  //Start the Serial communication to send messages to the computer
   Wire.begin();  //Initiate the Wire library and join the I2C bus
+  SPIFFS.begin();  //mount the SPIFFS storage
+  
   pinMode(2, INPUT_PULLUP);  //Initialize Pin 2 as Input and PullUp, to avoid floating states
   pinMode(LED_BUILTIN, OUTPUT);  //Initialize the bulid in LED as an output
-  digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+  digitalWrite(LED_BUILTIN, HIGH);   //turn the LED on (HIGH is the voltage level)
 
   Serial.print("begin Setup");
 
@@ -176,9 +325,6 @@ void setup() {
 
   server.begin();
   server.setNoDelay(true); // disable sending small packets
-
-  ip_blink();  //blink out the IP
-
 
   //--------------------------------------------------------
   // ArduinoOTA - allows OTA-FW-flashing with the Arduino IDE
@@ -221,8 +367,61 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  //--------------------------------------------------------
+  // make pin 2 an interrupt-pin, so whenever this pin is high,
+  // an interrupt-function (here: WinSensInterrupt()) will be 
+  // called. Crutial for the calculation of the windspeed.
+  //--------------------------------------------------------
+
   attachInterrupt(digitalPinToInterrupt(2), WinSensInterupt, FALLING);
 
+
+  //--------------------------------------------------------
+  // configuration of the HTTP-webserver
+  // define how to deal with different URLs send or requested
+  // by the clients
+  //--------------------------------------------------------
+
+  webserver.on("/", handleCorrection);  //maps the correction page to the root page of the webserver
+  webserver.on("/action_page", handleForm);  //form action is handled here
+  webserver.on("/ipblink", ipBlinkToggle);  //if the button to toggle the IPblinking is pressed, this calls the function to change it
+  webserver.begin();  //now that all is set up, start the HTTP-webserver
+
+
+  //--------------------------------------------------------
+  // processing of the stored correction-values
+  //--------------------------------------------------------
+
+  offset = readFile(SPIFFS, "/offset.txt");  //load the persistent data as variable
+  factor = readFile(SPIFFS, "/factor.txt");  //load the persistent data as variable
+  blIPblink = readFile(SPIFFS, "/blipblink.txt");  //update the blIPblink state
+
+
+  //--------------------------------------------------------
+  // initializing the stored correction-values
+  // this only takes effect at the very first start
+  //--------------------------------------------------------
+
+  if (!(blIPblink.equals("geblinkt") or blIPblink.equals("nicht geblinkt"))) {  //initially set blIPblink to "geblinkt" ("true")
+    blIPblink = "geblinkt"; 
+  }
+
+  if (offset.toInt() == 0) {  //initially set the offset to 0
+    offset = "0";
+  }
+  
+  if (factor.toFloat() == 0) {  //initially set the linear windspeed factor to 1
+    factor = "1";
+  }
+
+  //--------------------------------------------------------
+  // these lines can trigger the bliniking of the IP address
+  //--------------------------------------------------------
+
+  if (blIPblink.equals("geblinkt")) {
+  ip_blink();  //blink out the IP
+  };
+  
   Serial.print("leave setup");
 }
 
@@ -234,11 +433,14 @@ void loop() {
 
   ArduinoOTA.handle(); //deals with the ArduinoOTA-stuff, must be kept in to preserve posibility of OTA-FW-updates
 
+  webserver.handleClient();  //Handle client requests of the HTTP-webserver
+
   int Z = convertRawAngleToDegrees(ams5600.getRawAngle()); //stores the value of the angle
+
   long WS = 0;  //stores the value of the wind speed
   byte bySpeedCorrection = 100;  //value for finetuning the speed calculation
 
-  WS = ((33 * bySpeedCorrection) / (times));  //calculating the wind speed
+  WS = (((33 * bySpeedCorrection) / (times))*factor.toFloat());  //calculating the wind speed
 
   //--------------------------------------------------------
   // Assembly of the NMEA0183-sentence to calculate the checksum
