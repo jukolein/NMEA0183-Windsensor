@@ -133,9 +133,13 @@ const char graphic[] PROGMEM = R"=====(
     }
 
     function build_gui() {
+        let color
         for(let i=0;i<360; i+=10) {
             if(i%90 != 0) {
-                degs.innerHTML += '<div class="layer" style="transform:rotate('+i+'deg)">|</div>' 
+                if(i > 0 && i < 60) color="green"
+                else if(i < 360 && i > 300) color="red"
+                else color="gray"
+                degs.innerHTML += '<div class="layer" style="transform:rotate('+i+'deg);color:'+color+';">|</div>' 
             }
         }
     }
@@ -196,11 +200,11 @@ const char graphic[] PROGMEM = R"=====(
     }
     #needle {
         background:linear-gradient(#d00,#a00);
-        width:5px;
-        height:42%;
+        width:9px;
+        height:32%;
         border-radius:4px;
         margin:auto;
-        margin-top:6%;
+        margin-top:-6%;
         box-shadow:5px 5px 8px #333;
     }
     #dot_on_needle {
