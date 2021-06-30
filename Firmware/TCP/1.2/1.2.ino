@@ -90,6 +90,7 @@ const char correction_page[] PROGMEM = R"=====(
 //--------------------------------------------------------
 
 // MANY THANKS TO https://ziegenhagel.com FOR WRITING THE CODE
+
 const char graphic[] PROGMEM = R"=====(
 <div class="pos_upper_right">
     <a href="/config">Einstellungen</a>
@@ -586,8 +587,7 @@ void setup() {
  if (!MDNS.begin("windsensor")) {  // Start the mDNS responder for windsensor.local
     Serial.println("Error setting up MDNS responder!");
   }
-  MDNS.addService("http", "tcp", 80);   //tell the mDNS service, what to manage, here: the TCP-webserver on Port 80.
-  MDNS.addService("nmea-0183", "tcp", 8080);  // NMEA0183 data service for AVnav
+  MDNS.addService("http", "tcp", 80);   //tell the mDNS service, what to manage, here: the TCP-webserver on Port 80. 
   //An additional service for port 8080 is, as far as I can tell, not needed. At least Signal K could resolve with only this line
 
   
