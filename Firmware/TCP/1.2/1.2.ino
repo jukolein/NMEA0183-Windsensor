@@ -582,7 +582,8 @@ void setup() {
  if (!MDNS.begin("windsensor")) {  // Start the mDNS responder for windsensor.local
     Serial.println("Error setting up MDNS responder!");
   }
-  MDNS.addService("http", "tcp", 80);   //tell the mDNS service, what to manage, here: the TCP-webserver on Port 80. 
+  MDNS.addService("http", "tcp", 80);   //tell the mDNS service, what to manage, here: the TCP-webserver on Port 80.
+  MDNS.addService("nmea-0183", "tcp", 8080);  // NMEA0183 data service for AVnav
   //An additional service for port 8080 is, as far as I can tell, not needed. At least Signal K could resolve with only this line
 
   
