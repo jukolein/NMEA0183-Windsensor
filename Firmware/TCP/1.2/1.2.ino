@@ -76,7 +76,6 @@ const char correction_page[] PROGMEM = R"=====(
    Aktuell wird die IP beim Start ipblink_placeholder <br>
    <input type="button" onclick="location.href='/ipblink';" value="Ändern" />
 <br>  <br>
-
    <a href='/'> Zur Windanzeige </a>
 </body>
 </html>
@@ -95,7 +94,6 @@ const char graphic[] PROGMEM = R"=====(
 <div class="pos_upper_right">
     <a href="/config">Einstellungen</a>
 </div>
-
 <div id="instrument" class="layer">
     <div id="wind_direction" class="layer">--- deg</div>
     <div id="wind_speed" class="layer">--- m/s</div>
@@ -110,29 +108,22 @@ const char graphic[] PROGMEM = R"=====(
     <div id="dot_on_needle" class="layer"></div>
     <div id="reflection" style="background: linear-gradient(#2223, #2220); height: 140%; width: 200%; margin-left: -50%; margin-top: 41%; opacity: 0.5; " class="layer"></div>
 </div>
-
 <script>
     // version 0.2
-
     // config
     const API_URL = "/data"  //define where to pull the NMEA-Data from
     const API_ENABLED = true  // change between data from the API or hardcoded, for debugging
     const API_REFRESH_MS = 1000  //define refresh rate in ms
-
     // logic
     let el_pointer = document.getElementById("pointer")
     let el_direction = document.getElementById("wind_direction")
     let el_speed = document.getElementById("wind_speed")
     let degs = document.getElementById("degs")
-
     function refresh_gui(data) {
-
         el_pointer.style.transform = "rotate("+data[1]+"deg)"
         el_direction.innerHTML = data[1]+"&deg;"
         el_speed.innerHTML = data[3]+"m/s"
-
     }
-
     function build_gui() {
         let color
         for(let i=0;i<360; i+=10) {
@@ -144,9 +135,7 @@ const char graphic[] PROGMEM = R"=====(
             }
         }
     }
-
     function refresh_data() {
-
         fetch(API_URL)
         .then((data) => data.text())
         .then((data) => {
@@ -156,18 +145,13 @@ const char graphic[] PROGMEM = R"=====(
         .catch((error) => {
             console.error("Error:", error)
         })
-
     }
-
     build_gui()
-
     if(API_ENABLED)
         setInterval(refresh_data,API_REFRESH_MS)
     else
         refresh_gui("$WIMWV,250.5,R,1.8,M,A*38".split(","))
-
 </script>
-
 <style>
     body {
         display:flex;
@@ -588,6 +572,7 @@ void setup() {
     Serial.println("Error setting up MDNS responder!");
   }
   MDNS.addService("http", "tcp", 80);   //tell the mDNS service, what to manage, here: the TCP-webserver on Port 80. 
+  MDNS.addService("nmea-0183", "tcp", 8080);  // NMEA0183 data service for AVnav
   //An additional service for port 8080 is, as far as I can tell, not needed. At least Signal K could resolve with only this line
 
   
@@ -639,8 +624,8 @@ void loop() {
 
   MDNS.update();  //Allow mDNS processing
 
-  int Z = convertRawAngleToDegrees(ams5600.getRawAngle()) + offset.toInt(); //stores the value of the angle
-  
+  //int Z = convertRawAngleToDegrees(ams5600.getRawAngle()) + offset.toInt(); //stores the value of the angle
+  int Z = 8;
   long WS = 0;  //stores the value of the wind speed
   byte bySpeedCorrection = 100;  //value for finetuning the speed calculation
 
