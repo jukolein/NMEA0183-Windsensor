@@ -90,6 +90,7 @@ const char correction_page[] PROGMEM = R"=====(
 //--------------------------------------------------------
 
 // MANY THANKS TO https://ziegenhagel.com FOR WRITING THE CODE
+
 const char graphic[] PROGMEM = R"=====(
 <div class="pos_upper_right">
     <a href="/config">Einstellungen</a>
