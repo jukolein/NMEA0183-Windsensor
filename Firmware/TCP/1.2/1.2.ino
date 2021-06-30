@@ -415,7 +415,7 @@ void handleForm() {
  writeFile(SPIFFS, "/offset.txt", offset_html.c_str());  //persistently store it in a text file in the SPIFFS-section
  writeFile(SPIFFS, "/factor.txt", factor_html.c_str());  //persistently store it in a text file in the SPIFFS-section
 
- String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
+ String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the config page
  webserver.send(200, "text/html", link); //Send that link
 }
 
@@ -450,16 +450,14 @@ void data() {
 //--------------------------------------------------------
 
 void ipBlinkToggle() {
-  Serial.println("Toogle Funktion aufgerufen");
    String blIPblink_html;  //string for storing the value that will be written
    if (blIPblink.equals("nicht geblinkt")) {  //check current state, and, if "false" (that means "nicht geblinkt" in this case), change it to "true" ("geblinkt")...
     blIPblink_html = "geblinkt";}
    else {
     blIPblink_html = "nicht geblinkt";  //... and if it is "true", make it "false"
     }
-    Serial.println(blIPblink_html);
     writeFile(SPIFFS, "/blipblink.txt", blIPblink_html.c_str());  //persistently store it in a text file in the SPIFFS-section
-    String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
+    String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the config page
  webserver.send(200, "text/html", link); //Send that link
 }
 
