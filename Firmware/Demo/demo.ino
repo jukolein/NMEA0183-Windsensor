@@ -43,7 +43,17 @@ WiFiClient clients[MAX_CLIENTS]; //Array of clients
 
 ESP8266WebServer webserver(HTTP_PORT); //define the HTTP-webserver port
 
-//HTML code for the webpage where the correction-values are set
+
+//******************************************************************************************************************************************************
+// HTML PAGES
+//******************************************************************************************************************************************************
+
+//--------------------------------------------------------
+// correction_page - the HTM code for the page where 
+// the correction values are set
+// located in PROGMEM, as it is going to be static
+//--------------------------------------------------------
+
 const char correction_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <head>
@@ -51,10 +61,8 @@ const char correction_page[] PROGMEM = R"=====(
 </head>
 <html>
 <body>
-
 <h2>Windsensor III<h2>
 <h3>Korrekturdaten</h3>
-
 <form action="/action_page">
   Vorzeichenbehafteter Offset der Windrichtung in Grad:<br>
   <input type="text" name="offset_html" value="offset_placeholder">
@@ -65,21 +73,174 @@ const char correction_page[] PROGMEM = R"=====(
   <input type="submit" value="Anwenden">
 </form> 
  <br>  <br>
-<form>
-  Aktuell wird die IP beim Start ipblink_placeholder <br>
-  <button class="button" onclick="toggle()">Ändern</button>
-</form> 
+   Aktuell wird die IP beim Start ipblink_placeholder <br>
+   <input type="button" onclick="location.href='/ipblink';" value="Ändern" />
+<br>  <br>
 
-<script>
-function toggle() {
-     var xhr = new XMLHttpRequest();
-     xhr.open("GET", "/ipblink", true);
-     xhr.send();
-}
-</script>
-
+   <a href='/'> Zur Windanzeige </a>
 </body>
 </html>
+)=====";
+
+
+//--------------------------------------------------------
+// graphic - the HTM code for the page where 
+// the wind data is displayed graphically
+// located in PROGMEM, as it is going to be static
+//--------------------------------------------------------
+
+// MANY THANKS TO https://ziegenhagel.com FOR WRITING THE CODE
+const char graphic[] PROGMEM = R"=====(
+<div class="pos_upper_right">
+    <a href="/config">Einstellungen</a>
+</div>
+
+<div id="instrument" class="layer">
+    <div id="wind_direction" class="layer">--- deg</div>
+    <div id="wind_speed" class="layer">--- m/s</div>
+    <div id="nesw" style="margin-top:-5px">
+        <div class="layer" style="transform:rotate(0deg)">N</div>
+        <div class="layer" style="transform:rotate(90deg)">E</div>
+        <div class="layer" style="transform:rotate(180deg)"><div style="transform:rotate(180deg);">S</div></div>
+        <div class="layer" style="transform:rotate(270deg)">W</div>
+    </div>
+    <div id="degs"> </div>
+    <div id="pointer" class="layer"><div id="needle"></div></div>
+    <div id="dot_on_needle" class="layer"></div>
+    <div id="reflection" style="background: linear-gradient(#2223, #2220); height: 140%; width: 200%; margin-left: -50%; margin-top: 41%; opacity: 0.5; " class="layer"></div>
+</div>
+
+<script>
+    // version 0.2
+
+    // config
+    const API_URL = "/data"  //define where to pull the NMEA-Data from
+    const API_ENABLED = true  // change between data from the API or hardcoded, for debugging
+    const API_REFRESH_MS = 1000  //define refresh rate in ms
+
+    // logic
+    let el_pointer = document.getElementById("pointer")
+    let el_direction = document.getElementById("wind_direction")
+    let el_speed = document.getElementById("wind_speed")
+    let degs = document.getElementById("degs")
+
+    function refresh_gui(data) {
+
+        el_pointer.style.transform = "rotate("+data[1]+"deg)"
+        el_direction.innerHTML = data[1]+"&deg;"
+        el_speed.innerHTML = data[3]+"m/s"
+
+    }
+
+    function build_gui() {
+        for(let i=0;i<360; i+=10) {
+            if(i%90 != 0) {
+                degs.innerHTML += '<div class="layer" style="transform:rotate('+i+'deg)">|</div>' 
+            }
+        }
+    }
+
+    function refresh_data() {
+
+        fetch(API_URL)
+        .then((data) => data.text())
+        .then((data) => {
+            console.log("API response:",data)
+            refresh_gui(data.split(","))
+        })
+        .catch((error) => {
+            console.error("Error:", error)
+        })
+
+    }
+
+    build_gui()
+
+    if(API_ENABLED)
+        setInterval(refresh_data,API_REFRESH_MS)
+    else
+        refresh_gui("$WIMWV,250.5,R,1.8,M,A*38".split(","))
+
+</script>
+
+<style>
+    body {
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        background:#222;
+    }
+    #degs > div {
+        padding-top:11px;
+        color:#fff2;
+    }
+    #nesw > div {
+        padding-top:11px;
+        color:#ccc;
+    }
+    #instrument {
+        position:relative;
+        background:linear-gradient(#222,#555);
+        border:6px solid gray;
+    }
+    .layer {
+        font-size:30px;
+        text-align:center;
+        width:400px;
+        height:400px;
+        position:absolute;
+        border-radius:50%;
+    }
+    #pointer {
+        transition:1s;
+    }
+    #needle {
+        background:linear-gradient(#d00,#a00);
+        width:5px;
+        height:42%;
+        border-radius:4px;
+        margin:auto;
+        margin-top:6%;
+        box-shadow:5px 5px 8px #333;
+    }
+    #dot_on_needle {
+        border-radius:50%;
+        width:40px;height:40px;
+        margin:-20px;
+        left:50%;
+        top:50%;
+        background:#555;
+        box-shadow:2px 2px 3px #1113, inset -3px -3px 10px #0005, inset 3px 3px 10px #fff3;
+    }
+    #wind_speed, #wind_direction {
+        font-family:arial;
+        background: #B1BAA9;
+        padding:10px;
+        height:auto;
+        width:110px;
+        left:50%;
+        margin-left:-65px;
+        top:23%;
+        box-shadow: inset 2px 2px 3px #0007, inset -2px -2px 3px #fff3;
+        border-radius:2px;
+    }
+    #wind_speed {
+        top:63%;
+        margin-top:10px;
+    } .pos_upper_right {
+        padding:10px;
+        position:absolute;
+        right:0;
+        top:0;
+    } .pos_upper_right a {
+        color:gray;
+        font-family:arial;
+        text-decoration:none;
+    } .pos_upper_right a:hover {
+        color:white;
+        text-decoration:underline;
+    }
+   </style>
 )=====";
 
 
@@ -254,8 +415,32 @@ void handleForm() {
  writeFile(SPIFFS, "/offset.txt", offset_html.c_str());  //persistently store it in a text file in the SPIFFS-section
  writeFile(SPIFFS, "/factor.txt", factor_html.c_str());  //persistently store it in a text file in the SPIFFS-section
 
- String link = "<a href='/'> Startseite </a>";  //create a HTML-link that brings you back to the root page
+ String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
  webserver.send(200, "text/html", link); //Send that link
+}
+
+
+//--------------------------------------------------------
+// gui - send the HTML-code (or rather mainly JS) that  
+// displays the wind data on a web page
+//--------------------------------------------------------
+
+void gui() {
+  String s = graphic; //string to store the HTML page
+  webserver.send(200, "text/html", s); //Send web page
+}
+
+
+//--------------------------------------------------------
+// data - called by the graphic-JS-script
+// sends the HTML-code that displays the wind data as 
+// plain NMEA0813 text. That is then fetched by the 
+// graphics-API
+//--------------------------------------------------------
+
+void data() {
+  String s = result; //string to store the final NMEA0813-sentence
+  webserver.send(200, "text/html", s); //Send the NMEA0813-sentence
 }
 
 
@@ -265,14 +450,17 @@ void handleForm() {
 //--------------------------------------------------------
 
 void ipBlinkToggle() {
+  Serial.println("Toogle Funktion aufgerufen");
    String blIPblink_html;  //string for storing the value that will be written
    if (blIPblink.equals("nicht geblinkt")) {  //check current state, and, if "false" (that means "nicht geblinkt" in this case), change it to "true" ("geblinkt")...
     blIPblink_html = "geblinkt";}
    else {
     blIPblink_html = "nicht geblinkt";  //... and if it is "true", make it "false"
     }
-
+    Serial.println(blIPblink_html);
     writeFile(SPIFFS, "/blipblink.txt", blIPblink_html.c_str());  //persistently store it in a text file in the SPIFFS-section
+    String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
+ webserver.send(200, "text/html", link); //Send that link
 }
 
 
@@ -368,7 +556,7 @@ void setup() {
   // called. Crutial for the calculation of the windspeed.
   //--------------------------------------------------------
 
-  attachInterrupt(digitalPinToInterrupt(2), WinSensInterupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(2), WinSensInterupt, FALLING);  //define interrupt
 
 
   //--------------------------------------------------------
@@ -377,11 +565,13 @@ void setup() {
   // by the clients
   //--------------------------------------------------------
 
-  webserver.on("/", handleCorrection);  //maps the correction page to the root page of the webserver
+  webserver.on("/config", handleCorrection);  //calls the function that sends the HTML code of the correction page, when the client goes to /config
   webserver.on("/action_page", handleForm);  //form action is handled here
   webserver.on("/ipblink", ipBlinkToggle);  //if the button to toggle the IPblinking is pressed, this calls the function to change it
+  webserver.on("/", gui);  //calls the function that sends the HTML code to graphically display the wind data, when the client goes to the root of the webserver
+  webserver.on("/data", data);  //when called, call the function that displays the current NMEA0813-sentence to be fetched by the API as plain text
   webserver.begin();  //now that all is set up, start the HTTP-webserver
-  server.begin();
+  server.begin();  //start the TCP-server that sends the NMEA0813 on port 8080
   server.setNoDelay(true); // disable sending small packets
 
 
@@ -412,13 +602,13 @@ void setup() {
   // this only takes effect at the very first start
   //--------------------------------------------------------
 
-  if (!(blIPblink.equals("geblinkt") or blIPblink.equals("nicht geblinkt"))) {  //initially set blIPblink to "geblinkt" ("true")
+  if (!(blIPblink.equals("geblinkt") or blIPblink.equals("nicht geblinkt"))) {  //initially set blIPblink to "geblinkt" ("true"), if it is neither "geblinkt" nor "nicht geblinkt"
     blIPblink = "geblinkt"; }
 
-  if (offset.toInt() == 0) {  //initially set the offset to 0
+  if (offset.toInt() == 0) {  //initially set the offset to 0, if it is null or 0, as both get converted to 0 by toInt()
     offset = "0"; }
   
-  if (factor.toFloat() == 0) {  //initially set the linear windspeed factor to 1
+  if (factor.toFloat() == 0) {  //initially set the linear windspeed factor to 1 if it is null or 0, as both get converted to 0 by toInt(), but a factor of 0 would result in no windspeed at all
     factor = "1"; }
 
 
@@ -427,7 +617,7 @@ void setup() {
   //--------------------------------------------------------
 
   if (blIPblink.equals("geblinkt")) {
-  ip_blink();  //blink out the IP
+  ip_blink();  //call the function to blink out the IP
   };
   
   Serial.print("leave setup");
