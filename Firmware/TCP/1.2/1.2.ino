@@ -624,8 +624,8 @@ void loop() {
 
   MDNS.update();  //Allow mDNS processing
 
-  //int Z = convertRawAngleToDegrees(ams5600.getRawAngle()) + offset.toInt(); //stores the value of the angle
-  int Z = 8;
+  int Z = convertRawAngleToDegrees(ams5600.getRawAngle()) + offset.toInt(); //stores the value of the angle
+
   long WS = 0;  //stores the value of the wind speed
   byte bySpeedCorrection = 100;  //value for finetuning the speed calculation
 
