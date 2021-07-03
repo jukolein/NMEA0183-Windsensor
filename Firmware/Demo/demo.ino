@@ -49,7 +49,7 @@ ESP8266WebServer webserver(HTTP_PORT); //define the HTTP-webserver port
 //******************************************************************************************************************************************************
 
 //--------------------------------------------------------
-// correction_page - the HTM code for the page where 
+// correction_page - the HTM code for the page where
 // the correction values are set
 // located in PROGMEM, as it is going to be static
 //--------------------------------------------------------
@@ -100,10 +100,10 @@ const char graphic[] PROGMEM = R"=====(
     <div id="wind_direction" class="layer">--- deg</div>
     <div id="wind_speed" class="layer">--- m/s</div>
     <div id="nesw" style="margin-top:-5px">
-        <div class="layer" style="transform:rotate(0deg)">N</div>
-        <div class="layer" style="transform:rotate(90deg)">E</div>
-        <div class="layer" style="transform:rotate(180deg)"><div style="transform:rotate(180deg);">S</div></div>
-        <div class="layer" style="transform:rotate(270deg)">W</div>
+        <div class="layer" style="transform:rotate(0deg)">0</div>
+        <div class="layer" style="transform:rotate(90deg)">90</div>
+        <div class="layer" style="transform:rotate(180deg)"><div style="transform:rotate(180deg);">180</div></div>
+        <div class="layer" style="transform:rotate(270deg)">270</div>
     </div>
     <div id="degs"> </div>
     <div id="pointer" class="layer"><div id="needle"></div></div>
@@ -112,14 +112,14 @@ const char graphic[] PROGMEM = R"=====(
 </div>
 
 <script>
-    // version 0.2
+    // version 0.3
 
-    // config
-    const API_URL = "/data"  //define where to pull the NMEA-Data from
-    const API_ENABLED = true  // change between data from the API or hardcoded, for debugging
-    const API_REFRESH_MS = 1000  //define refresh rate in ms
+    // config, change to your needs
+    const API_URL = "/data"
+    const API_ENABLED = true
+    const API_REFRESH_MS = 1000
 
-    // logic
+    // code, don't touch
     let el_pointer = document.getElementById("pointer")
     let el_direction = document.getElementById("wind_direction")
     let el_speed = document.getElementById("wind_speed")
@@ -140,7 +140,7 @@ const char graphic[] PROGMEM = R"=====(
                 if(i > 0 && i < 60) color="green"
                 else if(i < 360 && i > 300) color="red"
                 else color="gray"
-                degs.innerHTML += '<div class="layer" style="transform:rotate('+i+'deg);color:'+color+';">|</div>' 
+                degs.innerHTML += '<div class="layer" style="transform:rotate('+i+'deg);"><span style="background-color:'+color+';"></span></div>' 
             }
         }
     }
@@ -175,9 +175,18 @@ const char graphic[] PROGMEM = R"=====(
         align-items:center;
         background:#222;
     }
+    #degs {
+        margin-top:5px;
+    }
     #degs > div {
-        padding-top:11px;
+        padding-top:0px;
         color:#fff2;
+        font-weight:bold;
+    }
+    #degs > div > span {
+        height:21px;
+        width:10px;
+        display:inline-block;
     }
     #nesw > div {
         padding-top:11px;
@@ -515,6 +524,17 @@ void setup() {
 
 
   //--------------------------------------------------------
+  // softAP - creates an Access Point if a complete
+  // stand alone mode of the Windsensor is wanted
+  // Device is then reachable at 192.168.1.4
+  //--------------------------------------------------------
+
+  if(WiFi.localIP().toString().equals("(IP unset)")) { //check if the WiFiManager managed to connect to a network, if not, create an AP
+    WiFi.softAP("Windsensor_AP", "123456789");  //create an AP with the SSID "Windsensor_AP" and the password "123456789"
+  }
+
+
+  //--------------------------------------------------------
   // ArduinoOTA - allows OTA-FW-flashing with the Arduino IDE
   // must be included in every flash, or OTA-capability is lost
   //--------------------------------------------------------
@@ -622,10 +642,10 @@ void setup() {
   // these lines can trigger the bliniking of the IP address
   //--------------------------------------------------------
 
-  if (blIPblink.equals("geblinkt")) {
-  ip_blink();  //call the function to blink out the IP
+  if (blIPblink.equals("geblinkt") and !(WiFi.localIP().toString().equals("(IP unset)"))) {  //if wanted and there is an IP to be blinked, call the function to blink it
+    ip_blink();  //call the function to blink out the IP
   };
-  
+
   Serial.print("leave setup");
 }
 
