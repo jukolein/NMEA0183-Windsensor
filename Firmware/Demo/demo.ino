@@ -33,6 +33,7 @@ long oldtimes = millis();   //used to calculate the time between two status chan
 String offset;  //string for storing the offset of the wind angle
 String factor;  //string for storing the liear correction facor of the wind speed
 String blIPblink;  //string for storing if the IP is to be blinked or not. "geblinkt" equals "true", "nicht geblinkt" equals "false"
+String ws_unit;  //string for storing the unit of the wind speed, like knots or meters per second, only affects the graphical display
 
 //--------------------------------------------------------
 // ESP8266 WiFi and webserver variables
@@ -72,11 +73,16 @@ const char correction_page[] PROGMEM = R"=====(
   <br>  <br>
   <input type="submit" value="Anwenden">
 </form> 
- <br>  <br>
+<br>  <br>
    Aktuell wird die IP beim Start ipblink_placeholder <br>
    <input type="button" onclick="location.href='/ipblink';" value="Ändern" />
 <br>  <br>
-
+<br>  <br>
+   Aktuelle Einheit der Windgeschwindigkeit: ws_unit_placeholder <br>
+   <input type="button" onclick="location.href='/meters';" value="Meter pro Sekunde" />
+   <input type="button" onclick="location.href='/kilometers';" value="Kilometer pro Stunde" />
+   <input type="button" onclick="location.href='/knots';" value="Knoten" />
+<br>  <br>
    <a href='/'> Zur Windanzeige </a>
 </body>
 </html>
@@ -95,7 +101,6 @@ const char graphic[] PROGMEM = R"=====(
 <div class="pos_upper_right">
     <a href="/config">Einstellungen</a>
 </div>
-
 <div id="instrument" class="layer">
     <div id="wind_direction" class="layer">--- deg</div>
     <div id="wind_speed" class="layer">--- m/s</div>
@@ -110,29 +115,22 @@ const char graphic[] PROGMEM = R"=====(
     <div id="dot_on_needle" class="layer"></div>
     <div id="reflection" style="background: linear-gradient(#2223, #2220); height: 140%; width: 200%; margin-left: -50%; margin-top: 41%; opacity: 0.5; " class="layer"></div>
 </div>
-
 <script>
     // version 0.3
-
     // config, change to your needs
     const API_URL = "/data"
     const API_ENABLED = true
     const API_REFRESH_MS = 1000
-
     // code, don't touch
     let el_pointer = document.getElementById("pointer")
     let el_direction = document.getElementById("wind_direction")
     let el_speed = document.getElementById("wind_speed")
     let degs = document.getElementById("degs")
-
     function refresh_gui(data) {
-
         el_pointer.style.transform = "rotate("+data[1]+"deg)"
         el_direction.innerHTML = data[1]+"&deg;"
-        el_speed.innerHTML = data[3]+"m/s"
-
+        el_speed.innerHTML = ((parseFloat(data[3]) * unit_manipulation
     }
-
     function build_gui() {
         let color
         for(let i=0;i<360; i+=10) {
@@ -144,9 +142,7 @@ const char graphic[] PROGMEM = R"=====(
             }
         }
     }
-
     function refresh_data() {
-
         fetch(API_URL)
         .then((data) => data.text())
         .then((data) => {
@@ -156,18 +152,13 @@ const char graphic[] PROGMEM = R"=====(
         .catch((error) => {
             console.error("Error:", error)
         })
-
     }
-
     build_gui()
-
     if(API_ENABLED)
         setInterval(refresh_data,API_REFRESH_MS)
     else
         refresh_gui("$WIMWV,250.5,R,1.8,M,A*38".split(","))
-
 </script>
-
 <style>
     body {
         display:flex;
@@ -397,6 +388,8 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
     offset = readFile(SPIFFS, "/offset.txt");  //update the offset-value
     factor = readFile(SPIFFS, "/factor.txt");  //upate the factor-value
     blIPblink = readFile(SPIFFS, "/blipblink.txt");  //update the blIPblink state
+    ws_unit = readFile(SPIFFS, "/ws_unit.txt");  //update the blIPblink state
+
   }
   file.close();
 }
@@ -413,6 +406,8 @@ void handleCorrection() {
   s.replace("offset_placeholder", offset);  //display current offset in the form
   s.replace("factor_placeholder", factor);  //display current facor in the form
   s.replace("ipblink_placeholder", blIPblink);  //display in the form if IP is going to be blinked at next boot
+  s.replace("ws_unit_placeholder", ws_unit);  //display the unit of the windspeed
+
   webserver.send(200, "text/html", s); //Send web page
 }
 
@@ -441,6 +436,16 @@ void handleForm() {
 
 void gui() {
   String s = graphic; //string to store the HTML page
+
+  if(ws_unit.equals("Kilometer pro Stunde")){
+    s.replace("unit_manipulation", "3.6)).toFixed(1) + \"km/h\"");
+  }
+  else if(ws_unit.equals("Knoten")){
+    s.replace("unit_manipulation", "1.944)).toFixed(1) + \"kn\"");
+  }
+  else {
+    s.replace("unit_manipulation", "1)).toFixed(1) + \"m/s\"");
+  }
   webserver.send(200, "text/html", s); //Send web page
 }
 
@@ -464,19 +469,43 @@ void data() {
 //--------------------------------------------------------
 
 void ipBlinkToggle() {
-  Serial.println("Toogle Funktion aufgerufen");
    String blIPblink_html;  //string for storing the value that will be written
    if (blIPblink.equals("nicht geblinkt")) {  //check current state, and, if "false" (that means "nicht geblinkt" in this case), change it to "true" ("geblinkt")...
     blIPblink_html = "geblinkt";}
    else {
     blIPblink_html = "nicht geblinkt";  //... and if it is "true", make it "false"
     }
-    Serial.println(blIPblink_html);
     writeFile(SPIFFS, "/blipblink.txt", blIPblink_html.c_str());  //persistently store it in a text file in the SPIFFS-section
     String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
  webserver.send(200, "text/html", link); //Send that link
 }
 
+
+//--------------------------------------------------------
+// ws_unitChange - if called, this function changes the 
+// value of the unit to be used for the graphical display
+//--------------------------------------------------------
+
+void ws_unitChange_meters() {
+    ws_unit = "Meter pro Sekunde";
+    writeFile(SPIFFS, "/ws_unit.txt", ws_unit.c_str());  //persistently store it in a text file in the SPIFFS-section
+    String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
+    webserver.send(200, "text/html", link); //Send that link
+}
+
+void ws_unitChange_kilometers() {
+    ws_unit = "Kilometer pro Stunde";
+    writeFile(SPIFFS, "/ws_unit.txt", ws_unit.c_str());  //persistently store it in a text file in the SPIFFS-section
+    String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
+    webserver.send(200, "text/html", link); //Send that link
+}
+
+void ws_unitChange_knots() {
+    ws_unit = "Knoten";
+    writeFile(SPIFFS, "/ws_unit.txt", ws_unit.c_str());  //persistently store it in a text file in the SPIFFS-section
+    String link = "<a href='/config'> Einstellungen </a>";  //create a HTML-link that brings you back to the root page
+    webserver.send(200, "text/html", link); //Send that link
+}
 
 //******************************************************************************************************************************************************
 // Setup
@@ -595,6 +624,11 @@ void setup() {
   webserver.on("/ipblink", ipBlinkToggle);  //if the button to toggle the IPblinking is pressed, this calls the function to change it
   webserver.on("/", gui);  //calls the function that sends the HTML code to graphically display the wind data, when the client goes to the root of the webserver
   webserver.on("/data", data);  //when called, call the function that displays the current NMEA0813-sentence to be fetched by the API as plain text
+
+  webserver.on("/meters", ws_unitChange_meters);  //when called, call the function that displays the current NMEA0813-sentence to be fetched by the API as plain text
+  webserver.on("/kilometers", ws_unitChange_kilometers);  //when called, call the function that displays the current NMEA0813-sentence to be fetched by the API as plain text
+  webserver.on("/knots", ws_unitChange_knots);  //when called, call the function that displays the current NMEA0813-sentence to be fetched by the API as plain text
+
   webserver.begin();  //now that all is set up, start the HTTP-webserver
   server.begin();  //start the TCP-server that sends the NMEA0813 on port 8080
   server.setNoDelay(true); // disable sending small packets
@@ -621,6 +655,7 @@ void setup() {
   offset = readFile(SPIFFS, "/offset.txt");  //load the persistent data as variable
   factor = readFile(SPIFFS, "/factor.txt");  //load the persistent data as variable
   blIPblink = readFile(SPIFFS, "/blipblink.txt");  //update the blIPblink state
+  ws_unit = readFile(SPIFFS, "/ws_unit.txt");  //update the ws_unit state
 
 
   //--------------------------------------------------------
@@ -631,12 +666,14 @@ void setup() {
   if (!(blIPblink.equals("geblinkt") or blIPblink.equals("nicht geblinkt"))) {  //initially set blIPblink to "geblinkt" ("true"), if it is neither "geblinkt" nor "nicht geblinkt"
     blIPblink = "geblinkt"; }
 
+  if (!(ws_unit.equals("meters") or ws_unit.equals("kilometers") or ws_unit.equals("knots") or ws_unit.equals("bft"))) {  //initially set blIPblink to "geblinkt" ("true"), if it is neither "geblinkt" nor "nicht geblinkt"
+    ws_unit = "meters"; }
+
   if (offset.toInt() == 0) {  //initially set the offset to 0, if it is null or 0, as both get converted to 0 by toInt()
     offset = "0"; }
   
   if (factor.toFloat() == 0) {  //initially set the linear windspeed factor to 1 if it is null or 0, as both get converted to 0 by toInt(), but a factor of 0 would result in no windspeed at all
     factor = "1"; }
-
 
   //--------------------------------------------------------
   // these lines can trigger the bliniking of the IP address
@@ -663,7 +700,7 @@ void loop() {
   MDNS.update();  //Allow mDNS processing
 
   //int Z = convertRawAngleToDegrees(ams5600.getRawAngle()) + offset.toInt(); //stores the value of the angle
-  int Z = random(360) + offset.toInt();  //generate a random number between 0 and 359 to test the code independently of the sensor
+  int Z = fmod((random(360) + offset.toInt()), 360);  //generate a random number between 0 and 359 to test the code independently of the sensor
 
   long WS = 0;  //stores the value of the wind speed
   byte bySpeedCorrection = 100;  //value for finetuning the speed calculation
