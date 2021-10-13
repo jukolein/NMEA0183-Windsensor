@@ -112,7 +112,7 @@ const char correction_page_de[] PROGMEM = R"=====(
 </head>
 <html>
 <body>
-<h1 style="text-align: center;">W132<h1>
+<h1 style="text-align: center;">Windsensor<h1>
 <h3>Einstellungen</h3>
 
 <form action="/action_page">
@@ -156,7 +156,7 @@ const char correction_page_en[] PROGMEM = R"=====(
 </head>
 <html>
 <body>
-<h1 style="text-align: center;">W132<h1>
+<h1 style="text-align: center;">Windsensor<h1>
 <h3>Settings</h3>
 <form action="/action_page">
   signed offset of the wind direction in degrees: <input type="text" name="offset_html" value="offset_placeholder">
